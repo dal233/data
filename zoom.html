@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Kraft Pattern with brush and zoom</title>
+<meta charset="utf-8">
+  </head>
+<!-- Load d3.js -->
+<script src="https://d3js.org/d3.v7.js"></script>
+        
+<!-- Create a div where the graph will take place -->
+<div id="my_dataviz"></div>
+
+<script>
+
+// set the dimensions and margins of the graph
+     var margin = {
+          top: 50,
+          right: 70,
+          bottom: 70,
+          left: 70,
+        },
+        width = 800 - margin.left - margin.right,
+        height = 450 - margin.top - margin.bottom;
+
+
+// append the svg object to the body of the page
+
+      var svg 
+        = d3.select("#my_dataviz")
+        .append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        // .attr('class', 'graph-svg-component')
+        .append('g')
+        .attr(
+          'transform',
+          'translate(' +
+            margin.left +
+            ',' +
+            margin.top +
+            ')'
+        );
+  
+//Read the data
+d3.csv("https://raw.githubusercontent.com/dal233/data/main/dave_kraft.csv",
+
+  // When reading the csv, I must format variables:
+  function(d){
+    return { Minute : +d.Minute, Insulin : +d.Insulin}
+  }).then(
+
+  // Now I can use this dataset:
+  function(data) {
+
+    // Add X axis --> it is a Minute format
+    const x = d3.scaleLinear()
+      .domain(d3.extent(data, function(d) { return d.Minute; }))
+      .range([ 0, width ]);
+    xAxis = svg.append("g")
+      .attr("transform", `translate(0, ${height})`)
+      .call(d3.axisBottom(x));
+
+    // Add Y axis
+    const y = d3.scaleLinear()
+      .domain([0, 4*d3.max(data, function(d) { return +d.Insulin; })])
+      .range([ height, 0 ]);
+    
+    yAxis = svg.append("g")
+      .call(d3.axisLeft(y));
+
+    // Add a clipPath: everything out of this area won't be drawn.
+    const clip = svg.append("defs").append("svg:clipPath")
+        .attr("id", "clip")
+        .append("svg:rect")
+        .attr("width", width )
+        .attr("height", height )
+        .attr("x", 0)
+        .attr("y", 0);
+
+    // Add brushing
+    const brush = d3.brushY()                   // Add the brush feature using the d3.brush function
+        .extent( [ [0,0], [width,height] ] )  // initialise the brush area: start at 0,0 and finishes at width,height: it means I select the whole graph area
+        .on("end", updateChart)               // Each time the brush selection changes, trigger the 'updateChart' function
+
+    // Create the line variable: where both the line and the brush take place
+    const line = svg.append('g')
+      .attr("clip-path", "url(#clip)")
+
+    // Add the line
+    line.append("path")
+      .datum(data)
+      .attr("class", "line")  // I add the class line to be able to modify this line later on.
+      .attr("fill", "none")
+      .attr("stroke", "steelblue")
+      .attr("stroke-width", 1.5)
+      .attr("d", d3.line().curve(d3.curveMonotoneX)
+        .x(function(d) { return x(d.Minute) })
+        .y(function(d) { return y(d.Insulin) })
+        )
+
+  //  Add the brushing
+    line
+      .append("g")
+        .attr("class", "brush")
+        .call(brush);
+
+ //   A function that set idleTimeOut to null
+    let idleTimeout
+    function idled() { idleTimeout = null; }
+
+ //   A function that upMinute the chart for given boundaries
+    function updateChart(event,d) {
+
+      // What are the selected boundaries?
+      extent = event.selection
+
+      // If no selection, back to initial coordinate. Otherwise, update X axis domain
+      if(!extent){
+        if (!idleTimeout) return idleTimeout = setTimeout(idled, 350); // This allows to wait a little bit
+        y.domain([ 4,8])
+      }else{
+        y.domain([ y.invert(extent[1]),y.invert(extent[0]) ])
+        line.select(".brush").call(brush.move, null) // This remove the grey brush area as soon as the selection has been done
+      }
+
+  //    UpMinute axis and line position
+      yAxis.transition().duration(1000).call(d3.axisLeft(y))
+      line
+          .select('.line')
+          .transition()
+          .duration(1000)
+          .attr("d", d3.line().curve(d3.curveMonotoneX)
+            .x(function(d) { return x(d.Minute) })
+            .y(function(d) { return y(d.Insulin) })
+          )
+    }
+
+   // If user double click, reinitialize the chart
+    svg.on("dblclick",function(){
+      y.domain(d3.extent(data, function(d) { return 4*d.Insulin; }))
+      yAxis.transition().call(d3.axisLeft(y))
+      line
+        .select('.line')
+        .transition()
+        .attr("d", d3.line()
+          .x(function(d) { return x(d.Minute) })
+          .y(function(d) { return y(d.Insulin) })
+      )
+    });
+
+})
+</script>
+</html>
